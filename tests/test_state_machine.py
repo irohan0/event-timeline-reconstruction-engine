@@ -132,7 +132,7 @@ class ChronologyTests(unittest.TestCase):
         # Unreachable through reconstruct() (event_ids are unique once repeats
         # are removed), but it is part of the spec's sort key, so pin it here.
         moment = datetime(2026, 4, 3, 9, tzinfo=timezone.utc)
-        events = [ValidEvent(moment, make_row("R2")), ValidEvent(moment, make_row("R10")), ValidEvent(moment, make_row("R1"))]
+        events = [ValidEvent(moment, make_row(row_id)) for row_id in ("R2", "R10", "R1")]
         self.assertEqual([e.row.row_id for e in sorted(events, key=lambda e: e.sort_key)], ["R1", "R10", "R2"])
 
     def test_first_and_last_times_are_the_accepted_extremes_in_utc(self):

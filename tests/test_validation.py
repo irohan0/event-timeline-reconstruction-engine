@@ -91,7 +91,10 @@ class EligibleRowTests(unittest.TestCase):
         self.assertEqual(sorted(v.sort_key for v in valid)[0][1:], ("E1", "R1"))
 
     def test_anomaly_keeps_the_rows_own_ids(self):
-        _, anomalies = validate_rows([make_row("R1", order_id="", event_id="E7"), make_row("R2", order_id="O5", event_id="")])
+        _, anomalies = validate_rows([
+            make_row("R1", order_id="", event_id="E7"),
+            make_row("R2", order_id="O5", event_id=""),
+        ])
         self.assertEqual(
             [(a.row_id, a.order_id, a.event_id) for a in anomalies],
             [("R1", "", "E7"), ("R2", "O5", "")],
