@@ -7,6 +7,7 @@ back out; it makes no business decisions.
 
 import csv
 import os
+import string
 from dataclasses import dataclass
 
 from . import rules
@@ -23,6 +24,11 @@ ENCODING_ERRORS = "surrogateescape"
 # load it than abort. 2**31 - 1 fits a C long on every platform.
 csv.field_size_limit(2**31 - 1)
 
+# event_type is upper-cased for ASCII letters only. Full Unicode upper()
+# maps look-alikes onto vocabulary words ("ſhipped" -> "SHIPPED",
+# "paıd" -> "PAID"), which would invent aliases the spec forbids.
+_ASCII_UPPER = str.maketrans(string.ascii_lowercase, string.ascii_uppercase)
+
 
 class InputError(ValueError):
     """The input file cannot be read with the specified schema."""
@@ -33,7 +39,8 @@ class EventRow:
     """One input record after normalization.
 
     Every value is stripped of surrounding whitespace, and an empty string
-    means "missing". event_type is also upper-cased. event_time stays as the
+    means "missing". event_type is also upper-cased (ASCII letters only, so
+    no aliases are invented). event_time stays as the
     trimmed text because the duplicate check compares the raw string; it is
     parsed later. Context-only columns (received_at, source_system, metadata)
     are deliberately not kept: they must not influence any decision.
@@ -63,7 +70,7 @@ def read_events(path: str) -> tuple[list[EventRow], LoadReport]:
     with open(path, newline="", encoding=INPUT_ENCODING, errors=ENCODING_ERRORS) as handle:
         reader = csv.reader(handle)
         try:
-            header = next(reader, None)
+            header = next((cells for cells in reader if any(cell.strip() for cell in cells)), None)
             if header is None:
                 raise InputError("input file is empty (no header row)")
             row_id_at, event_id_at, order_id_at, type_at, time_at = _locate_columns(header)
@@ -83,7 +90,7 @@ def read_events(path: str) -> tuple[list[EventRow], LoadReport]:
                         row_id=cells[row_id_at].strip(),
                         event_id=cells[event_id_at].strip(),
                         order_id=cells[order_id_at].strip(),
-                        event_type=cells[type_at].strip().upper(),
+                        event_type=cells[type_at].strip().translate(_ASCII_UPPER),
                         event_time=cells[time_at].strip(),
                     )
                 )

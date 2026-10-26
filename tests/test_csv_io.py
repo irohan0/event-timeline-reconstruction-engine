@@ -34,6 +34,14 @@ class NormalizationTests(TempDirTestCase):
         ]
         self.assertEqual(types, ["OUT_FOR_DELIVERY", "OUT-FOR-DELIVERY", "CANCELED", "PLACED"])
 
+    def test_unicode_look_alikes_are_not_uppercased_into_vocabulary_words(self):
+        # str.upper() would turn these into SHIPPED / PAID; only ASCII letters change.
+        types = [
+            self.load_one(f"R1,E1,O1,{raw},2026-04-03T09:00:00Z,,,").event_type
+            for raw in ("ſhipped", "paıd", "Paid")
+        ]
+        self.assertEqual(types, ["ſHIPPED", "PAıD", "PAID"])
+
     def test_event_time_is_kept_as_trimmed_text(self):
         # Parsing happens later; the duplicate check needs the raw string.
         row = self.load_one("R1,E1,O1,PAID,  2026-04-03T09:00:00+00:00  ,,,")
@@ -78,6 +86,10 @@ class SchemaTests(TempDirTestCase):
     def test_empty_file_is_an_error(self):
         with self.assertRaisesRegex(InputError, "empty"):
             read_events(self.write_file("empty.csv", b""))
+
+    def test_blank_lines_before_the_header_are_skipped(self):
+        events, _ = read_events(self.write_csv(["", "  ,  ", INPUT_HEADER, "R1,E1,O1,PAID,T,,,"]))
+        self.assertEqual([e.row_id for e in events], ["R1"])
 
     def test_header_only_file_has_no_rows(self):
         events, report = read_events(self.write_csv([INPUT_HEADER]))

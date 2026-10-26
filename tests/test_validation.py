@@ -37,7 +37,8 @@ class SingleProblemTests(unittest.TestCase):
 
     def test_near_miss_and_alias_types_are_unknown(self):
         # No aliases are invented: only exact vocabulary entries are accepted.
-        for event_type in ("CANCELED", "OUT-FOR-DELIVERY", "OUTFORDELIVERY", "START", "UNKNOWN", "PLACED_", "???"):
+        for event_type in ("CANCELED", "OUT-FOR-DELIVERY", "OUTFORDELIVERY", "START", "UNKNOWN", "PLACED_", "???",
+                           "ſHIPPED", "PAıD"):
             with self.subTest(event_type=event_type):
                 self.assertEqual(verdict(make_row("R1", event_type=event_type)), rules.UNKNOWN_EVENT)
 
