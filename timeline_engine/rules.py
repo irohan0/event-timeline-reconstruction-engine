@@ -27,7 +27,7 @@ SUMMARY_COLUMNS = (
 )
 ANOMALY_COLUMNS = ("row_id", "order_id", "event_id", "anomaly_type", "details")
 
-# The only allowed anomaly_type values (spec section 4).
+# The only allowed anomaly_type values (spec section 4), in the spec's order.
 DUPLICATE_EVENT = "DUPLICATE_EVENT"
 EVENT_ID_CONFLICT = "EVENT_ID_CONFLICT"
 MISSING_ORDER_ID = "MISSING_ORDER_ID"
@@ -36,35 +36,38 @@ MISSING_TIMESTAMP = "MISSING_TIMESTAMP"
 INVALID_TIMESTAMP = "INVALID_TIMESTAMP"
 UNKNOWN_EVENT = "UNKNOWN_EVENT"
 INVALID_TRANSITION = "INVALID_TRANSITION"
-ANOMALY_TYPES = frozenset(
-    {
-        DUPLICATE_EVENT,
-        EVENT_ID_CONFLICT,
-        MISSING_ORDER_ID,
-        MISSING_EVENT_ID,
-        MISSING_TIMESTAMP,
-        INVALID_TIMESTAMP,
-        UNKNOWN_EVENT,
-        INVALID_TRANSITION,
-    }
+ANOMALY_TYPES = (
+    DUPLICATE_EVENT,
+    EVENT_ID_CONFLICT,
+    MISSING_ORDER_ID,
+    MISSING_EVENT_ID,
+    MISSING_TIMESTAMP,
+    INVALID_TIMESTAMP,
+    UNKNOWN_EVENT,
+    INVALID_TRANSITION,
 )
 
-# The supplied event_type vocabulary: every state named in the business state
-# machine (spec section 7). START is the implicit initial state, not an event.
-VOCABULARY = frozenset(
-    {
-        "PLACED",
-        "PAID",
-        "PACKED",
-        "SHIPPED",
-        "OUT_FOR_DELIVERY",
-        "DELIVERED",
-        "RETURN_REQUESTED",
-        "RETURNED",
-        "REFUNDED",
-        "CANCELLED",
-    }
-)
+# Business state machine (spec section 7): current state -> the only event
+# types that may follow it. No state may repeat itself, and CANCELLED and
+# REFUNDED are terminal.
+START_STATE = "START"
+TRANSITIONS = {
+    START_STATE: frozenset({"PLACED"}),
+    "PLACED": frozenset({"PAID", "CANCELLED"}),
+    "PAID": frozenset({"PACKED", "CANCELLED"}),
+    "PACKED": frozenset({"SHIPPED", "CANCELLED"}),
+    "SHIPPED": frozenset({"OUT_FOR_DELIVERY"}),
+    "OUT_FOR_DELIVERY": frozenset({"DELIVERED"}),
+    "DELIVERED": frozenset({"RETURN_REQUESTED"}),
+    "RETURN_REQUESTED": frozenset({"RETURNED"}),
+    "RETURNED": frozenset({"REFUNDED"}),
+    "CANCELLED": frozenset(),
+    "REFUNDED": frozenset(),
+}
+
+# The supplied event_type vocabulary: every state in the table above.
+# START is the implicit initial state, not an event, so it is excluded.
+VOCABULARY = frozenset(TRANSITIONS) - {START_STATE}
 
 # Status reported for an order with no accepted event (spec section 4).
 UNKNOWN_STATUS = "UNKNOWN"
