@@ -1,0 +1,87 @@
+"""The reconstruction rules, as pure functions over normalized EventRows.
+
+Stages run in the order the spec prescribes (section 8): event-identity
+checks, then single-row validation, then state transitions. Each stage
+removes the rows it rejects, so every rejected row gets exactly one anomaly.
+"""
+
+from dataclasses import dataclass
+
+from . import rules
+from .csv_io import EventRow
+
+
+@dataclass(frozen=True, slots=True)
+class Anomaly:
+    """One rejected input row, as reported in anomalies.csv.
+
+    order_id and event_id are the rejected row's own (trimmed) values.
+    """
+
+    row_id: str
+    order_id: str
+    event_id: str
+    anomaly_type: str
+    details: str
+
+    def as_row(self) -> tuple[str, str, str, str, str]:
+        return (self.row_id, self.order_id, self.event_id, self.anomaly_type, self.details)
+
+
+def resolve_event_ids(events: list[EventRow]) -> tuple[list[EventRow], list[Anomaly]]:
+    """Keep one canonical row per nonempty event_id (spec section 5).
+
+    Within each group of rows sharing an event_id, the row with the
+    lexicographically smallest row_id is canonical, whatever its position in
+    the file and whether or not it is itself valid. Every other row is
+    compared with the canonical row (never with each other) on
+    (order_id, event_type, raw event_time): equal means DUPLICATE_EVENT,
+    different means EVENT_ID_CONFLICT. Rows without an event_id are never
+    grouped; they pass through to validation.
+
+    Returns the surviving rows in input order, plus one anomaly per rejected
+    row (in no particular order; the report is sorted when written).
+    """
+    groups: dict[str, list[int]] = {}
+    for index, row in enumerate(events):
+        if row.event_id:
+            groups.setdefault(row.event_id, []).append(index)
+
+    rejected: set[int] = set()
+    anomalies: list[Anomaly] = []
+    for indices in groups.values():
+        if len(indices) == 1:
+            continue
+        # The trailing fields only break ties between rows that share a
+        # row_id, which the spec rules out; they keep even that case
+        # independent of input order.
+        canonical_index, *other_indices = sorted(indices, key=lambda i: _by_row_id(events[i]))
+        canonical = events[canonical_index]
+        for index in other_indices:
+            rejected.add(index)
+            anomalies.append(_classify_repeat(events[index], canonical))
+
+    survivors = [row for index, row in enumerate(events) if index not in rejected]
+    return survivors, anomalies
+
+
+def _by_row_id(row: EventRow) -> tuple[str, str, str, str]:
+    return (row.row_id, row.order_id, row.event_type, row.event_time)
+
+
+def _classify_repeat(row: EventRow, canonical: EventRow) -> Anomaly:
+    differences = [
+        f"{field} {getattr(row, field)!r} vs {getattr(canonical, field)!r}"
+        for field in ("order_id", "event_type", "event_time")
+        if getattr(row, field) != getattr(canonical, field)
+    ]
+    if differences:
+        anomaly_type = rules.EVENT_ID_CONFLICT
+        details = (
+            f"event_id reused with a different identity than canonical row "
+            f"{canonical.row_id}: {'; '.join(differences)}"
+        )
+    else:
+        anomaly_type = rules.DUPLICATE_EVENT
+        details = f"repeat of canonical row {canonical.row_id} (same order_id, event_type and event_time)"
+    return Anomaly(row.row_id, row.order_id, row.event_id, anomaly_type, details)

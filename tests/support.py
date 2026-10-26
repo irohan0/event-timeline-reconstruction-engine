@@ -6,11 +6,18 @@ import sys
 import tempfile
 import unittest
 
+from timeline_engine.csv_io import EventRow
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAIN_PY = os.path.join(PROJECT_ROOT, "main.py")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 
 INPUT_HEADER = "row_id,event_id,order_id,event_type,event_time,received_at,source_system,metadata"
+
+
+def make_row(row_id, event_id="E1", order_id="O1", event_type="PLACED", event_time="2026-04-03T09:00:00Z"):
+    """Build an already-normalized EventRow; tests override only what matters."""
+    return EventRow(row_id, event_id, order_id, event_type, event_time)
 
 
 class TempDirTestCase(unittest.TestCase):
