@@ -144,6 +144,19 @@ class WriteOutputTests(TempDirTestCase):
             self.assertEqual(handle.read(), b"row_id,order_id,event_id,anomaly_type,details\r\n")
         self.assertFalse([name for name in os.listdir(out_dir) if name.endswith(".tmp")])
 
+    def test_failed_write_leaves_no_temp_file_and_keeps_the_previous_report(self):
+        write_outputs(self.tmp, [("O1", "PLACED", 1, 0, "a", "b")], [])
+
+        class Unwritable:
+            def __str__(self):
+                raise RuntimeError("simulated failure part-way through a write")
+
+        with self.assertRaises(RuntimeError):
+            write_outputs(self.tmp, [("O2", "PAID", 1, 0, "", ""), ("O3", Unwritable(), 1, 0, "", "")], [])
+        self.assertEqual([name for name in os.listdir(self.tmp) if name.endswith(".tmp")], [])
+        with open(os.path.join(self.tmp, rules.SUMMARY_FILENAME), "rb") as handle:
+            self.assertEqual(handle.read().splitlines()[1:], [b"O1,PLACED,1,0,a,b"])
+
 
 class ParserFailureTests(TempDirTestCase):
     def test_csv_parser_errors_become_input_errors_with_a_line_number(self):

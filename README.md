@@ -43,7 +43,7 @@ python -m unittest        # standard library only
 python -m pytest          # same tests, if you have pytest installed
 ```
 
-There are 103 tests and they take about two seconds. The five categories the brief asks for (§11) are covered here:
+There are 104 tests and they take about two seconds. The five categories the brief asks for (§11) are covered here:
 
 | Category | Where |
 |---|---|

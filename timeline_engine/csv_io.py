@@ -5,6 +5,7 @@ normalized EventRow records (spec section 5) and writes already-computed rows
 back out; it makes no business decisions.
 """
 
+import contextlib
 import csv
 import os
 import string
@@ -40,10 +41,10 @@ class EventRow:
 
     Every value is stripped of surrounding whitespace, and an empty string
     means "missing". event_type is also upper-cased (ASCII letters only, so
-    no aliases are invented). event_time stays as the
-    trimmed text because the duplicate check compares the raw string; it is
-    parsed later. Context-only columns (received_at, source_system, metadata)
-    are deliberately not kept: they must not influence any decision.
+    no aliases are invented). event_time stays as the trimmed text because
+    the duplicate check compares the raw string; it is parsed later.
+    Context-only columns (received_at, source_system, metadata) are
+    deliberately not kept: they must not influence any decision.
     """
 
     row_id: str
@@ -139,10 +140,16 @@ def write_outputs(output_dir: str, summary_rows, anomaly_rows) -> tuple[str, str
 
 def _write_csv(path: str, columns, rows) -> None:
     # Write to a temporary file first so an interrupted run never leaves a
-    # half-written report behind under the real name.
+    # half-written report behind under the real name; if writing fails, the
+    # temporary file is removed and any previous report stays as it was.
     temp_path = path + ".tmp"
-    with open(temp_path, "w", newline="", encoding=OUTPUT_ENCODING, errors=ENCODING_ERRORS) as handle:
-        writer = csv.writer(handle)  # default dialect: minimal quoting, CRLF line endings
-        writer.writerow(columns)
-        writer.writerows(rows)
-    os.replace(temp_path, path)
+    try:
+        with open(temp_path, "w", newline="", encoding=OUTPUT_ENCODING, errors=ENCODING_ERRORS) as handle:
+            writer = csv.writer(handle)  # default dialect: minimal quoting, CRLF line endings
+            writer.writerow(columns)
+            writer.writerows(rows)
+        os.replace(temp_path, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(temp_path)
+        raise
