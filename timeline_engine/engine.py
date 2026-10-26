@@ -6,9 +6,11 @@ removes the rows it rejects, so every rejected row gets exactly one anomaly.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from . import rules
 from .csv_io import EventRow
+from .timeparse import parse_event_time
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +28,20 @@ class Anomaly:
 
     def as_row(self) -> tuple[str, str, str, str, str]:
         return (self.row_id, self.order_id, self.event_id, self.anomaly_type, self.details)
+
+
+@dataclass(frozen=True, slots=True)
+class ValidEvent:
+    """A row that passed every single-row check, with its parsed UTC time."""
+
+    moment: datetime
+    row: EventRow
+
+    @property
+    def sort_key(self) -> tuple[datetime, str, str]:
+        # Chronological order within an order (spec section 7): parsed
+        # event_time, then event_id, then row_id. Never file position.
+        return (self.moment, self.row.event_id, self.row.row_id)
 
 
 def resolve_event_ids(events: list[EventRow]) -> tuple[list[EventRow], list[Anomaly]]:
@@ -63,6 +79,44 @@ def resolve_event_ids(events: list[EventRow]) -> tuple[list[EventRow], list[Anom
 
     survivors = [row for index, row in enumerate(events) if index not in rejected]
     return survivors, anomalies
+
+
+def validate_rows(rows: list[EventRow]) -> tuple[list[ValidEvent], list[Anomaly]]:
+    """Apply the single-row checks to canonical rows (spec section 6).
+
+    Returns the rows eligible for timeline reconstruction (in input order)
+    and one anomaly per rejected row.
+    """
+    valid: list[ValidEvent] = []
+    anomalies: list[Anomaly] = []
+    for row in rows:
+        moment = parse_event_time(row.event_time) if row.event_time else None
+        problem = _first_problem(row, moment)
+        if problem is None:
+            valid.append(ValidEvent(moment, row))
+        else:
+            anomalies.append(Anomaly(row.row_id, row.order_id, row.event_id, *problem))
+    return valid, anomalies
+
+
+def _first_problem(row: EventRow, moment: datetime | None) -> tuple[str, str] | None:
+    """The first failing check in the spec's exact order, as (type, details)."""
+    if not row.order_id:
+        return rules.MISSING_ORDER_ID, "order_id is empty"
+    if not row.event_id:
+        return rules.MISSING_EVENT_ID, "event_id is empty"
+    if not row.event_time:
+        return rules.MISSING_TIMESTAMP, "event_time is empty"
+    if moment is None:
+        return (
+            rules.INVALID_TIMESTAMP,
+            f"event_time {row.event_time!r} is not a real date/time in a supported UTC format "
+            "(YYYY-MM-DDTHH:MM:SSZ, YYYY-MM-DD HH:MM:SS or YYYY-MM-DDTHH:MM:SS+00:00)",
+        )
+    if row.event_type not in rules.VOCABULARY:
+        shown = repr(row.event_type) if row.event_type else "empty"
+        return rules.UNKNOWN_EVENT, f"event_type {shown} is not in the supported vocabulary"
+    return None
 
 
 def _by_row_id(row: EventRow) -> tuple[str, str, str, str]:
