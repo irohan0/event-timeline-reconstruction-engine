@@ -1,0 +1,2 @@
+# Keep CSV bytes exactly as written (CRLF from Python's csv module), on every platform.
+*.csv -text

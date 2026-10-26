@@ -1,0 +1,13 @@
+# Python / tooling
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Large supplied inputs: not part of the submission (spec section 11)
+data/order_events.csv
+data/debug_subset.csv
+
+# Original assessment brief (kept locally for reference only)
+*.pdf
+ASSESSMENT_BRIEF.md
