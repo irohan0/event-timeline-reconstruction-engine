@@ -1,11 +1,15 @@
-"""Timeline replay and order summaries (spec sections 7 and 8)."""
+"""Timeline replay and order summaries (spec sections 7 and 8).
+
+Spec test categories: time ordering, invalid transitions, deterministic ties.
+"""
 
 import itertools
 import unittest
+from datetime import datetime, timezone
 
 from tests.support import make_row
 from timeline_engine import rules
-from timeline_engine.engine import reconstruct
+from timeline_engine.engine import ValidEvent, reconstruct
 
 
 def timeline(*steps, order_id="O1"):
@@ -123,6 +127,13 @@ class ChronologyTests(unittest.TestCase):
         summary, anomalies = summary_of(rows)
         self.assertEqual((summary.final_status, summary.valid_events), ("PLACED", 1))
         self.assertEqual([(a.row_id, a.anomaly_type) for a in anomalies], [("R2", rules.INVALID_TRANSITION)])
+
+    def test_row_id_breaks_ties_when_time_and_event_id_are_equal(self):
+        # Unreachable through reconstruct() (event_ids are unique once repeats
+        # are removed), but it is part of the spec's sort key, so pin it here.
+        moment = datetime(2026, 4, 3, 9, tzinfo=timezone.utc)
+        events = [ValidEvent(moment, make_row("R2")), ValidEvent(moment, make_row("R10")), ValidEvent(moment, make_row("R1"))]
+        self.assertEqual([e.row.row_id for e in sorted(events, key=lambda e: e.sort_key)], ["R1", "R10", "R2"])
 
     def test_first_and_last_times_are_the_accepted_extremes_in_utc(self):
         rows = timeline(("PLACED", "09:00:00"), ("SHIPPED", "09:30:00"), ("PAID", "09:10:00"))

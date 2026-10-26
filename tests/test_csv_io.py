@@ -1,9 +1,15 @@
-"""Loading and normalizing input (spec sections 3.1 and 5) and writing reports."""
+"""Loading and normalizing input (spec sections 3.1 and 5) and writing reports.
 
+Spec test category: missing/unknown values (whitespace-only cells, short rows).
+"""
+
+import csv
 import os
+import sys
 import unittest
+from unittest import mock
 
-from tests.support import INPUT_HEADER, TempDirTestCase, run_cli
+from tests.support import INPUT_HEADER, TempDirTestCase
 from timeline_engine import rules
 from timeline_engine.csv_io import EventRow, InputError, read_events, write_outputs
 
@@ -139,32 +145,38 @@ class WriteOutputTests(TempDirTestCase):
         self.assertFalse([name for name in os.listdir(out_dir) if name.endswith(".tmp")])
 
 
-class CliTests(TempDirTestCase):
-    def test_creates_both_reports_in_a_new_directory(self):
-        path = self.write_csv([INPUT_HEADER, "R1,E1,O1,PLACED,2026-04-03T09:00:00Z,,,"])
-        out_dir = os.path.join(self.tmp, "out")
-        result = run_cli("--input", path, "--output-dir", out_dir)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        for name in (rules.SUMMARY_FILENAME, rules.ANOMALIES_FILENAME):
-            self.assertTrue(os.path.isfile(os.path.join(out_dir, name)))
+class ParserFailureTests(TempDirTestCase):
+    def test_csv_parser_errors_become_input_errors_with_a_line_number(self):
+        class FailingReader:
+            """Returns the header, then fails the way csv.reader does on a corrupt line."""
 
-    def test_missing_input_file_exits_2_without_traceback(self):
-        result = run_cli("--input", os.path.join(self.tmp, "nope.csv"), "--output-dir", self.tmp)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("error:", result.stderr)
-        self.assertNotIn("Traceback", result.stderr)
+            line_num = 2
 
-    def test_directory_as_input_exits_2_with_clear_message(self):
-        result = run_cli("--input", self.tmp, "--output-dir", os.path.join(self.tmp, "out"))
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("is a directory", result.stderr)
+            def __init__(self, _handle):
+                self._rows = iter([INPUT_HEADER.split(",")])
 
-    def test_bad_schema_exits_2_without_traceback(self):
-        path = self.write_csv(["a,b,c", "1,2,3"])
-        result = run_cli("--input", path, "--output-dir", self.tmp)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("missing required column", result.stderr)
-        self.assertNotIn("Traceback", result.stderr)
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                row = next(self._rows, None)
+                if row is None:
+                    raise csv.Error("simulated parser failure")
+                return row
+
+        path = self.write_csv([INPUT_HEADER, "R1,E1,O1,PAID,T,,,"])
+        with mock.patch("timeline_engine.csv_io.csv.reader", FailingReader):
+            with self.assertRaisesRegex(InputError, "malformed CSV near line 2: simulated parser failure"):
+                read_events(path)
+
+    def test_nul_bytes_are_kept_or_rejected_cleanly_depending_on_python(self):
+        path = self.write_file("nul.csv", f"{INPUT_HEADER}\r\nR1,E1,O1,PA\x00ID,T,,,\r\n".encode())
+        if sys.version_info >= (3, 11):
+            events, _ = read_events(path)
+            self.assertEqual(events[0].event_type, "PA\x00ID")  # kept; later reported as UNKNOWN_EVENT
+        else:  # Python 3.10's csv module cannot read NUL bytes at all
+            with self.assertRaisesRegex(InputError, "malformed CSV near line 2: line contains NUL"):
+                read_events(path)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,7 @@
-"""Single-row validation and its precedence (spec section 6)."""
+"""Single-row validation and its precedence (spec section 6).
+
+Spec test category: missing/unknown values.
+"""
 
 import unittest
 from datetime import datetime, timezone

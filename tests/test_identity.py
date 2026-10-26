@@ -1,4 +1,7 @@
-"""Duplicate and conflicting event IDs (spec section 5)."""
+"""Duplicate and conflicting event IDs (spec section 5).
+
+Spec test categories: duplicates, deterministic ties/reproducibility.
+"""
 
 import random
 import unittest

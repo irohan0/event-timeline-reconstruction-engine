@@ -1,4 +1,7 @@
-"""Strict event_time parsing (spec section 6 and the data dictionary)."""
+"""Strict event_time parsing (spec section 6 and the data dictionary).
+
+Spec test categories: time ordering, missing/invalid values.
+"""
 
 import unittest
 from datetime import datetime, timezone
